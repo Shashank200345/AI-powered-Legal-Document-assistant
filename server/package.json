@@ -1,0 +1,67 @@
+{
+  "name": "lexiplain-backend",
+  "version": "1.0.0",
+  "description": "LexiPlain Backend - AI-Powered Legal Document Analyzer",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "build": "echo 'No build step required for Node.js'",
+    "test": "jest"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.3.1",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "uuid": "^9.0.1",
+    "mime-types": "^2.1.35",
+    "@google-cloud/vertexai": "^1.7.0",
+    "@google-cloud/vision": "^4.3.1",
+    "@google-cloud/speech": "^6.6.0",
+    "@google-cloud/text-to-speech": "^5.4.0",
+    "@google-cloud/firestore": "^7.6.0",
+    "@google-cloud/storage": "^7.7.0",
+    "@google-cloud/functions-framework": "^3.3.0",
+    "pdf-parse": "^1.1.1",
+    "pdf2pic": "^2.1.4",
+    "sharp": "^0.33.2",
+    "mammoth": "^1.6.0",
+    "natural": "^6.12.0",
+    "compromise": "^14.10.0",
+    "sentiment": "^5.0.2",
+    "keyword-extractor": "^0.0.28",
+    "franc": "^6.1.0",
+    "tiktoken": "^1.0.10",
+    "openai": "^4.24.7",
+    "axios": "^1.6.5",
+    "lodash": "^4.17.21",
+    "socket.io": "^4.7.4",
+    "winston": "^3.11.0",
+    "joi": "^17.12.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.8",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "legal",
+    "ai",
+    "nlp",
+    "document-analysis",
+    "google-cloud",
+    "vertex-ai",
+    "rag"
+  ]
+}

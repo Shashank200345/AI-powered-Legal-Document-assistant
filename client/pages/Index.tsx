@@ -24,13 +24,13 @@ export default function Index() {
                 href="/demo"
                 className="shine rounded-full bg-gradient-to-r from-sky-500 to-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-xl shadow-sky-500/25"
               >
-                <span className="inline-flex items-center gap-2"><Upload className="h-4 w-4" />Upload Document</span>
+                <span className="inline-flex items-center gap-2"><Upload className="h-4 w-4" />Try Live Demo</span>
               </a>
               <a
                 href="/demo"
                 className="rounded-full border border-slate-200/70 bg-white/40 px-7 py-3 text-sm font-semibold text-slate-800 backdrop-blur-md hover:bg-white/70 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:bg-white/20"
               >
-                <span className="inline-flex items-center gap-2"><Video className="h-4 w-4" />See Demo</span>
+                <span className="inline-flex items-center gap-2"><Video className="h-4 w-4" />Upload Document</span>
               </a>
             </div>
 
