@@ -5,6 +5,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 const navItems = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/demo", label: "Demo" },
+  { href: "/chat", label: "Chat" },
   { href: "/pricing", label: "Pricing" },
   { href: "/faq", label: "FAQ" },
 ];
@@ -50,7 +51,7 @@ export default function Navbar() {
                 See Demo
               </Link>
               <Link
-                to={{ pathname: "/demo" }}
+                to="/chat"
                 className="shine rounded-full bg-gradient-to-r from-sky-500 to-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-sky-500/25"
               >
                 Upload Document

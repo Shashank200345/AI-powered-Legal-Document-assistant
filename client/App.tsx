@@ -17,6 +17,7 @@ import FAQ from "@/pages/FAQ";
 import Trust from "@/pages/Trust";
 import About from "@/pages/About";
 import Contact from "@/pages/Contact";
+import DocumentChat from "@/pages/DocumentChat";
 import { ThemeProvider } from "next-themes";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/how-it-works" element={<HowItWorks />} />
               <Route path="/demo" element={<Demo />} />
+              <Route path="/chat" element={<DocumentChat />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/faq" element={<FAQ />} />
               <Route path="/trust" element={<Trust />} />
