@@ -1,16 +1,20 @@
-import express from 'express';
-import multer from 'multer';
-import { body, param, validationResult } from 'express-validator';
-import winston from 'winston';
+import express from "express";
+import multer from "multer";
+import { body, param, validationResult } from "express-validator";
+import winston from "winston";
 
-import { processDocument, processDocuments, getProcessingStatus } from '../services/documentProcessor.js';
-import { uploadFile, saveDocumentAnalysis } from '../services/googleCloud.js';
+import {
+  processDocument,
+  processDocuments,
+  getProcessingStatus,
+} from "../services/documentProcessor.js";
+import databaseService from "../services/databaseService.js";
 
 const router = express.Router();
 const logger = winston.createLogger({
-  level: 'info',
+  level: "info",
   format: winston.format.json(),
-  defaultMeta: { service: 'documents-api' }
+  defaultMeta: { service: "documents-api" },
 });
 
 // Configure multer for file uploads
@@ -22,15 +26,15 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain',
-      'image/jpeg',
-      'image/jpg', 
-      'image/png',
-      'image/gif',
-      'image/bmp'
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/bmp",
     ];
 
     if (allowedTypes.includes(file.mimetype)) {
@@ -38,15 +42,16 @@ const upload = multer({
     } else {
       cb(new Error(`Unsupported file type: ${file.mimetype}`));
     }
-  }
+  },
 });
 
 // POST /api/documents/upload - Single document upload
-router.post('/upload', 
-  upload.single('document'),
+router.post(
+  "/upload",
+  upload.single("document"),
   [
-    body('options.extractText').optional().isBoolean(),
-    body('options.generatePreview').optional().isBoolean(),
+    body("options.extractText").optional().isBoolean(),
+    body("options.generatePreview").optional().isBoolean(),
   ],
   async (req, res) => {
     try {
@@ -54,25 +59,25 @@ router.post('/upload',
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: 'Validation failed',
-          details: errors.array()
+          error: "Validation failed",
+          details: errors.array(),
         });
       }
 
       if (!req.file) {
         return res.status(400).json({
-          error: 'No file uploaded',
-          message: 'Please provide a document file'
+          error: "No file uploaded",
+          message: "Please provide a document file",
         });
       }
 
-      const io = req.app.get('io');
+      const io = req.app.get("io");
       const startTime = Date.now();
 
       // Emit processing start event
-      io.emit('document:processing:start', {
+      io.emit("document:processing:start", {
         fileName: req.file.originalname,
-        size: req.file.size
+        size: req.file.size,
       });
 
       logger.info(`Processing document upload: ${req.file.originalname}`);
@@ -81,23 +86,23 @@ router.post('/upload',
       const options = {
         extractText: req.body.options?.extractText !== false,
         generatePreview: req.body.options?.generatePreview === true,
-        ...req.body.options
+        ...req.body.options,
       };
 
       const result = await processDocument(req.file, options);
 
       // Emit processing complete event
-      io.emit('document:processing:complete', {
+      io.emit("document:processing:complete", {
         documentId: result.documentId,
         fileName: result.originalName,
-        processingTime: result.processingTime
+        processingTime: result.processingTime,
       });
 
       logger.info(`Document processed successfully: ${result.documentId}`);
 
       res.status(201).json({
         success: true,
-        message: 'Document uploaded and processed successfully',
+        message: "Document uploaded and processed successfully",
         data: {
           documentId: result.documentId,
           fileName: result.originalName,
@@ -109,107 +114,105 @@ router.post('/upload',
           pages: result.pages,
           wordCount: result.wordCount,
           processingTime: result.processingTime,
-          metadata: result.metadata
+          metadata: result.metadata,
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-
     } catch (error) {
-      logger.error('Document upload failed:', error);
+      logger.error("Document upload failed:", error);
 
-      const io = req.app.get('io');
-      io.emit('document:processing:error', {
+      const io = req.app.get("io");
+      io.emit("document:processing:error", {
         fileName: req.file?.originalname,
-        error: error.message
+        error: error.message,
       });
 
       res.status(500).json({
-        error: 'Document processing failed',
+        error: "Document processing failed",
         message: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
-  }
+  },
 );
 
 // POST /api/documents/batch-upload - Multiple document upload
-router.post('/batch-upload',
-  upload.array('documents', 5),
-  async (req, res) => {
-    try {
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).json({
-          error: 'No files uploaded',
-          message: 'Please provide at least one document file'
-        });
-      }
-
-      const io = req.app.get('io');
-      logger.info(`Processing batch upload: ${req.files.length} files`);
-
-      // Emit batch processing start event
-      io.emit('document:batch:start', {
-        fileCount: req.files.length,
-        files: req.files.map(f => ({ name: f.originalname, size: f.size }))
-      });
-
-      // Process all documents
-      const options = req.body.options || {};
-      const result = await processDocuments(req.files, options);
-
-      // Emit batch processing complete event
-      io.emit('document:batch:complete', {
-        totalProcessed: result.totalProcessed,
-        successful: result.successful.length,
-        failed: result.failed.length,
-        successRate: result.successRate
-      });
-
-      logger.info(`Batch processing completed: ${result.successful.length}/${result.totalProcessed} successful`);
-
-      res.status(201).json({
-        success: true,
-        message: 'Batch upload completed',
-        data: {
-          totalProcessed: result.totalProcessed,
-          successful: result.successful.map(doc => ({
-            documentId: doc.documentId,
-            fileName: doc.originalName,
-            processingTime: doc.processingTime
-          })),
-          failed: result.failed,
-          successRate: result.successRate
-        },
-        timestamp: new Date().toISOString()
-      });
-
-    } catch (error) {
-      logger.error('Batch upload failed:', error);
-
-      const io = req.app.get('io');
-      io.emit('document:batch:error', {
-        error: error.message
-      });
-
-      res.status(500).json({
-        error: 'Batch processing failed',
-        message: error.message,
-        timestamp: new Date().toISOString()
+router.post("/batch-upload", upload.array("documents", 5), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        error: "No files uploaded",
+        message: "Please provide at least one document file",
       });
     }
+
+    const io = req.app.get("io");
+    logger.info(`Processing batch upload: ${req.files.length} files`);
+
+    // Emit batch processing start event
+    io.emit("document:batch:start", {
+      fileCount: req.files.length,
+      files: req.files.map((f) => ({ name: f.originalname, size: f.size })),
+    });
+
+    // Process all documents
+    const options = req.body.options || {};
+    const result = await processDocuments(req.files, options);
+
+    // Emit batch processing complete event
+    io.emit("document:batch:complete", {
+      totalProcessed: result.totalProcessed,
+      successful: result.successful.length,
+      failed: result.failed.length,
+      successRate: result.successRate,
+    });
+
+    logger.info(
+      `Batch processing completed: ${result.successful.length}/${result.totalProcessed} successful`,
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Batch upload completed",
+      data: {
+        totalProcessed: result.totalProcessed,
+        successful: result.successful.map((doc) => ({
+          documentId: doc.documentId,
+          fileName: doc.originalName,
+          processingTime: doc.processingTime,
+        })),
+        failed: result.failed,
+        successRate: result.successRate,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error("Batch upload failed:", error);
+
+    const io = req.app.get("io");
+    io.emit("document:batch:error", {
+      error: error.message,
+    });
+
+    res.status(500).json({
+      error: "Batch processing failed",
+      message: error.message,
+      timestamp: new Date().toISOString(),
+    });
   }
-);
+});
 
 // GET /api/documents/:documentId/status - Get processing status
-router.get('/:documentId/status',
-  [param('documentId').isUUID().withMessage('Invalid document ID')],
+router.get(
+  "/:documentId/status",
+  [param("documentId").isUUID().withMessage("Invalid document ID")],
   async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: 'Validation failed',
-          details: errors.array()
+          error: "Validation failed",
+          details: errors.array(),
         });
       }
 
@@ -218,29 +221,29 @@ router.get('/:documentId/status',
 
       res.json({
         success: true,
-        data: status
+        data: status,
       });
-
     } catch (error) {
-      logger.error('Status check failed:', error);
+      logger.error("Status check failed:", error);
       res.status(500).json({
-        error: 'Status check failed',
-        message: error.message
+        error: "Status check failed",
+        message: error.message,
       });
     }
-  }
+  },
 );
 
 // POST /api/documents/:documentId/reprocess - Reprocess document
-router.post('/:documentId/reprocess',
-  [param('documentId').isUUID().withMessage('Invalid document ID')],
+router.post(
+  "/:documentId/reprocess",
+  [param("documentId").isUUID().withMessage("Invalid document ID")],
   async (req, res) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          error: 'Validation failed',
-          details: errors.array()
+          error: "Validation failed",
+          details: errors.array(),
         });
       }
 
@@ -248,140 +251,226 @@ router.post('/:documentId/reprocess',
       // For now, return a placeholder response
       res.json({
         success: true,
-        message: 'Document reprocessing initiated',
+        message: "Document reprocessing initiated",
         data: {
           documentId: req.params.documentId,
-          status: 'pending'
-        }
+          status: "pending",
+        },
       });
-
     } catch (error) {
-      logger.error('Document reprocessing failed:', error);
+      logger.error("Document reprocessing failed:", error);
       res.status(500).json({
-        error: 'Reprocessing failed',
-        message: error.message
+        error: "Reprocessing failed",
+        message: error.message,
       });
     }
+  },
+);
+
+// GET /api/documents - Get all documents
+router.get("/", async (req, res) => {
+  try {
+    const documents = await databaseService.getAllDocuments();
+    res.json({
+      success: true,
+      data: documents,
+    });
+  } catch (error) {
+    logger.error("Failed to get documents:", error);
+    res.status(500).json({
+      error: "Failed to retrieve documents",
+      message: error.message,
+    });
   }
+});
+
+// GET /api/documents/:documentId - Get specific document
+router.get(
+  "/:documentId",
+  [param("documentId").isUUID().withMessage("Invalid document ID")],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: errors.array(),
+        });
+      }
+
+      const { documentId } = req.params;
+      const document = await databaseService.getDocument(documentId);
+
+      if (!document) {
+        return res.status(404).json({
+          error: "Document not found",
+          message: `Document with ID ${documentId} does not exist`,
+        });
+      }
+
+      res.json({
+        success: true,
+        data: document,
+      });
+    } catch (error) {
+      logger.error("Failed to get document:", error);
+      res.status(500).json({
+        error: "Failed to retrieve document",
+        message: error.message,
+      });
+    }
+  },
+);
+
+// DELETE /api/documents/:documentId - Delete document
+router.delete(
+  "/:documentId",
+  [param("documentId").isUUID().withMessage("Invalid document ID")],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: errors.array(),
+        });
+      }
+
+      const { documentId } = req.params;
+      await databaseService.deleteDocument(documentId);
+
+      res.json({
+        success: true,
+        message: "Document deleted successfully",
+      });
+    } catch (error) {
+      logger.error("Failed to delete document:", error);
+      res.status(500).json({
+        error: "Failed to delete document",
+        message: error.message,
+      });
+    }
+  },
 );
 
 // GET /api/documents/supported-types - Get supported file types
-router.get('/supported-types', (req, res) => {
+router.get("/supported-types", (req, res) => {
   const supportedTypes = {
     documents: {
-      'PDF': {
-        extensions: ['.pdf'],
-        mimeTypes: ['application/pdf'],
-        description: 'Portable Document Format files'
+      PDF: {
+        extensions: [".pdf"],
+        mimeTypes: ["application/pdf"],
+        description: "Portable Document Format files",
       },
-      'Microsoft Word': {
-        extensions: ['.doc', '.docx'],
+      "Microsoft Word": {
+        extensions: [".doc", ".docx"],
         mimeTypes: [
-          'application/msword',
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ],
-        description: 'Microsoft Word documents'
+        description: "Microsoft Word documents",
       },
-      'Text': {
-        extensions: ['.txt'],
-        mimeTypes: ['text/plain'],
-        description: 'Plain text files'
-      }
+      Text: {
+        extensions: [".txt"],
+        mimeTypes: ["text/plain"],
+        description: "Plain text files",
+      },
     },
     images: {
-      'JPEG': {
-        extensions: ['.jpg', '.jpeg'],
-        mimeTypes: ['image/jpeg'],
-        description: 'JPEG image files'
+      JPEG: {
+        extensions: [".jpg", ".jpeg"],
+        mimeTypes: ["image/jpeg"],
+        description: "JPEG image files",
       },
-      'PNG': {
-        extensions: ['.png'],
-        mimeTypes: ['image/png'],
-        description: 'PNG image files'
+      PNG: {
+        extensions: [".png"],
+        mimeTypes: ["image/png"],
+        description: "PNG image files",
       },
-      'GIF': {
-        extensions: ['.gif'],
-        mimeTypes: ['image/gif'],
-        description: 'GIF image files'
+      GIF: {
+        extensions: [".gif"],
+        mimeTypes: ["image/gif"],
+        description: "GIF image files",
       },
-      'BMP': {
-        extensions: ['.bmp'],
-        mimeTypes: ['image/bmp'],
-        description: 'Bitmap image files'
-      }
+      BMP: {
+        extensions: [".bmp"],
+        mimeTypes: ["image/bmp"],
+        description: "Bitmap image files",
+      },
     },
     limits: {
       maxFileSize: `${process.env.MAX_FILE_SIZE_MB || 50}MB`,
       maxFiles: 5,
-      totalSizeLimit: `${(parseInt(process.env.MAX_FILE_SIZE_MB) || 50) * 5}MB`
-    }
+      totalSizeLimit: `${(parseInt(process.env.MAX_FILE_SIZE_MB) || 50) * 5}MB`,
+    },
   };
 
   res.json({
     success: true,
-    data: supportedTypes
+    data: supportedTypes,
   });
 });
 
 // GET /api/documents/demo-samples - Get demo sample documents
-router.get('/demo-samples', (req, res) => {
+router.get("/demo-samples", (req, res) => {
   const demoSamples = [
     {
-      id: 'demo-rental-agreement',
-      name: 'Sample Rental Agreement',
-      description: 'A standard residential rental agreement with common clauses',
-      type: 'Rental Agreement',
-      estimatedProcessingTime: '15 seconds',
-      keyFeatures: ['Termination clauses', 'Payment terms', 'Security deposit'],
-      downloadUrl: '/api/documents/demo-samples/rental-agreement.pdf'
+      id: "demo-rental-agreement",
+      name: "Sample Rental Agreement",
+      description:
+        "A standard residential rental agreement with common clauses",
+      type: "Rental Agreement",
+      estimatedProcessingTime: "15 seconds",
+      keyFeatures: ["Termination clauses", "Payment terms", "Security deposit"],
+      downloadUrl: "/api/documents/demo-samples/rental-agreement.pdf",
     },
     {
-      id: 'demo-employment-contract',
-      name: 'Employment Contract Template',
-      description: 'Basic employment contract with salary and benefits',
-      type: 'Employment Contract',
-      estimatedProcessingTime: '12 seconds',
-      keyFeatures: ['Compensation', 'Confidentiality', 'Termination'],
-      downloadUrl: '/api/documents/demo-samples/employment-contract.pdf'
+      id: "demo-employment-contract",
+      name: "Employment Contract Template",
+      description: "Basic employment contract with salary and benefits",
+      type: "Employment Contract",
+      estimatedProcessingTime: "12 seconds",
+      keyFeatures: ["Compensation", "Confidentiality", "Termination"],
+      downloadUrl: "/api/documents/demo-samples/employment-contract.pdf",
     },
     {
-      id: 'demo-nda',
-      name: 'Non-Disclosure Agreement',
-      description: 'Standard NDA for protecting confidential information',
-      type: 'Non-Disclosure Agreement',
-      estimatedProcessingTime: '8 seconds',
-      keyFeatures: ['Confidentiality terms', 'Duration', 'Exceptions'],
-      downloadUrl: '/api/documents/demo-samples/nda.pdf'
-    }
+      id: "demo-nda",
+      name: "Non-Disclosure Agreement",
+      description: "Standard NDA for protecting confidential information",
+      type: "Non-Disclosure Agreement",
+      estimatedProcessingTime: "8 seconds",
+      keyFeatures: ["Confidentiality terms", "Duration", "Exceptions"],
+      downloadUrl: "/api/documents/demo-samples/nda.pdf",
+    },
   ];
 
   res.json({
     success: true,
-    data: demoSamples
+    data: demoSamples,
   });
 });
 
 // Error handling middleware for multer
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
+    if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        error: 'File too large',
-        message: `File size should not exceed ${process.env.MAX_FILE_SIZE_MB || 50}MB`
+        error: "File too large",
+        message: `File size should not exceed ${process.env.MAX_FILE_SIZE_MB || 50}MB`,
       });
     }
-    if (err.code === 'LIMIT_FILE_COUNT') {
+    if (err.code === "LIMIT_FILE_COUNT") {
       return res.status(400).json({
-        error: 'Too many files',
-        message: 'Maximum 5 files allowed per upload'
+        error: "Too many files",
+        message: "Maximum 5 files allowed per upload",
       });
     }
   }
-  
-  if (err.message.includes('Unsupported file type')) {
+
+  if (err.message.includes("Unsupported file type")) {
     return res.status(400).json({
-      error: 'Unsupported file type',
-      message: err.message
+      error: "Unsupported file type",
+      message: err.message,
     });
   }
 

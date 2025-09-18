@@ -91,6 +91,20 @@ class APIClient {
     });
   }
 
+  async getAllDocuments(): Promise<any> {
+    return this.request('/documents');
+  }
+
+  async getDocument(documentId: string): Promise<any> {
+    return this.request(`/documents/${documentId}`);
+  }
+
+  async deleteDocument(documentId: string): Promise<any> {
+    return this.request(`/documents/${documentId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async batchUploadDocuments(files: File[]): Promise<any> {
     const formData = new FormData();
     files.forEach((file, index) => {
@@ -165,11 +179,58 @@ class APIClient {
     });
   }
 
+  // Chat endpoints
+  async createChatSession(documentId: string, sessionId?: string, title?: string): Promise<any> {
+    return this.request(`/chat/${documentId}/session`, {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, title }),
+    });
+  }
+
+  async sendChatMessage(documentId: string, message: string, sessionId: string, messageType: 'user' | 'assistant' | 'system' = 'user'): Promise<any> {
+    return this.request(`/chat/${documentId}/message`, {
+      method: 'POST',
+      body: JSON.stringify({ message, sessionId, messageType }),
+    });
+  }
+
+  async getChatHistory(documentId: string, sessionId: string, limit: number = 50, offset: number = 0): Promise<any> {
+    const params = new URLSearchParams({
+      sessionId,
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    return this.request(`/chat/${documentId}/history?${params}`);
+  }
+
+  async getChatSessions(documentId: string): Promise<any> {
+    return this.request(`/chat/${documentId}/sessions`);
+  }
+
+  async deleteChatSession(documentId: string, sessionId: string): Promise<any> {
+    return this.request(`/chat/${documentId}/session?sessionId=${sessionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async clearChatHistory(documentId: string, sessionId: string): Promise<any> {
+    return this.request(`/chat/${documentId}/history?sessionId=${sessionId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async exportChatHistory(documentId: string, sessionId: string, format: 'json' | 'txt' = 'json'): Promise<any> {
+    return this.request(`/chat/${documentId}/export?sessionId=${sessionId}&format=${format}`);
+  }
+
+  async getSessionStats(documentId: string, sessionId: string): Promise<any> {
+    return this.request(`/chat/${documentId}/session/${sessionId}/stats`);
+  }
+
   // Voice endpoints
   async processVoiceQuery(documentId: string, audioBlob: Blob, options?: {
     sessionId?: string;
-    languageCode?: string;
-    voiceName?: string;
+    language?: string;
   }): Promise<any> {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'query.webm');
@@ -177,11 +238,8 @@ class APIClient {
     if (options?.sessionId) {
       formData.append('sessionId', options.sessionId);
     }
-    if (options?.languageCode) {
-      formData.append('languageCode', options.languageCode);
-    }
-    if (options?.voiceName) {
-      formData.append('voiceName', options.voiceName);
+    if (options?.language) {
+      formData.append('language', options.language);
     }
 
     return this.request(`/voice/${documentId}/query`, {
@@ -191,12 +249,12 @@ class APIClient {
     });
   }
 
-  async transcribeAudio(audioBlob: Blob, languageCode?: string): Promise<any> {
+  async transcribeAudio(audioBlob: Blob, language?: string): Promise<any> {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.webm');
     
-    if (languageCode) {
-      formData.append('languageCode', languageCode);
+    if (language) {
+      formData.append('language', language);
     }
 
     return this.request('/voice/transcribe', {
@@ -206,19 +264,19 @@ class APIClient {
     });
   }
 
-  async synthesizeSpeech(text: string, voiceName?: string, languageCode?: string): Promise<any> {
+  async synthesizeSpeech(text: string, voice?: string, language?: string): Promise<any> {
     return this.request('/voice/synthesize', {
       method: 'POST',
-      body: JSON.stringify({ text, voiceName, languageCode }),
+      body: JSON.stringify({ text, voice, language }),
     });
   }
 
-  async getConversationHistory(sessionId: string): Promise<any> {
-    return this.request(`/voice/${sessionId}/history`);
+  async getVoiceSessionHistory(documentId: string, sessionId: string): Promise<any> {
+    return this.request(`/voice/${documentId}/session/${sessionId}/history`);
   }
 
-  async clearConversationHistory(sessionId: string): Promise<any> {
-    return this.request(`/voice/${sessionId}/history`, {
+  async deleteVoiceSession(documentId: string, sessionId: string): Promise<any> {
+    return this.request(`/voice/${documentId}/session/${sessionId}`, {
       method: 'DELETE',
     });
   }
